@@ -13,7 +13,7 @@ bad_words = [
 
 warnings = {}
 
-# ✅ WELCOME MESSAGE (NO IMAGE)
+# WELCOME MESSAGE (NO IMAGE)
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for user in update.message.new_chat_members:
         name = user.first_name
@@ -37,7 +37,7 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(text)
 
-# ✅ AUTO MODERATION
+# AUTO MODERATION
 async def check_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.text:
         return
@@ -84,7 +84,7 @@ async def check_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             return
 
-# ✅ MANUAL WARN
+# MANUAL WARN
 async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.reply_to_message:
         user = update.message.reply_to_message.from_user
@@ -97,7 +97,7 @@ async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⚠️ {username} warned ({warnings[user_id]}/3)"
         )
 
-# ✅ MAIN
+# MAIN
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
