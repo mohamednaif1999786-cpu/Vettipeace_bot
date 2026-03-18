@@ -1,6 +1,5 @@
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
-import os
 
 TOKEN = "8266575451:AAHcqrW3lq-wrDP6vMUse7u9Hh0xJofKJX8"
 
