@@ -1,155 +1,108 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
-from PIL import Image, ImageDraw, ImageFont
-import io
+from telegram import Update
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
 import os
 
-import os
-
-# Get the token from Railway environment variable
-TOKEN = os.getenv("TOKEN")  # TOKEN must be set in Railway Variables
+TOKEN = os.getenv("TOKEN")
 
 bad_words = [
     "sex","porn","xxx","nude","fuck","ass","bitch","cunt","dick",
     "cock","pussy","slut","whore","rape","masturbate","boobs","penis",
     "pm","dm","private chat","private message","direct chat","direct message",
-    "punda","sunni","potta","thevudiya","thayoli","oombu","nudity","inbox","thevidya","ummbu","gommala"
+    "punda","sunni","potta","thevidiya","thayali","oombu","nudity","inbox","ommala"
 ]
 
 warnings = {}
 
+# ✅ WELCOME MESSAGE (NO IMAGE)
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for user in update.message.new_chat_members:
         name = user.first_name
         username = f"@{user.username}" if user.username else "No username"
-        user_id = user.id
+        group_id = update.effective_chat.id
 
-        image = Image.new("RGBA", (800, 400), (0, 0, 0))
-font = ImageFont.load_default()
-async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    for user in update.message.new_chat_members:
-        name = user.first_name
-        username = f"@{user.username}" if user.username else "No username"
-        user_id = user.id
+        text = f"""
+🔮 Welcome to Bun Butter Jam
 
-        # Safe image (no file needed)
-        image = Image.new("RGBA", (800, 400), (0, 0, 0))
-        draw = ImageDraw.Draw(image)
-        font = ImageFont.load_default()
+👤 Name: {name}
+📛 Username: {username}
+🆔 Group ID: {group_id}
 
-        draw.text((50,50), "Welcome to Bun Butter Jam ✨", fill="white", font=font)
-        draw.text((50,120), f"Name: {name}", fill="white", font=font)
-        draw.text((50,180), f"Username: {username}", fill="white", font=font)
-        draw.text((50,240), f"ID: {user_id}", fill="white", font=font)
+📜 Rules:
+🚫 Don't PM / DM
+🚫 Avoid bad words
+⚠️ Follow group rules
 
-        bio = io.BytesIO()
-        bio.name = "welcome.png"
-        image.save(bio, "PNG")
-        bio.seek(0)
+📞 If any issue, contact admin
+        """
 
-        keyboard = [[InlineKeyboardButton("Rules", callback_data='rules')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(text)
 
-        await update.message.reply_photo(
-            photo=InputFile(bio),
-            caption="⚠️ Please follow the rules!",
-            reply_markup=reply_markup
-        )
-
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    if query.data == 'rules':
-        rules_text = (
-            "📜 *Group Rules*\n\n"
-            "1️⃣ No 18+ content\n"
-            "2️⃣ No spam\n"
-            "3️⃣ Respect others\n"
-            "4️⃣ No PM/DM for bad things\n"
-            "5️⃣ Follow admins"
-        )
-        await query.edit_message_text(rules_text, parse_mode='Markdown')
-
+# ✅ AUTO MODERATION
 async def check_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.text:
         return
-    user_id = update.message.from_user.id
-    username = update.message.from_user.username or "NoUsername"
+
     msg = update.message.text.lower()
+    user = update.message.from_user
+    user_id = user.id
+    username = f"@{user.username}" if user.username else user.first_name
 
     for word in bad_words:
         if word in msg:
-            try: await update.message.delete()
-            except: pass
 
+            # delete message
+            try:
+                await update.message.delete()
+            except:
+                pass
+
+            # warning count
             warnings[user_id] = warnings.get(user_id, 0) + 1
 
-            reason = (
-                "against group rules"
-                if word in ["pm","dm","private chat","private message","direct chat","direct message"]
-                else "18+ behavior"
-            )
+            # reason
+            if word in ["pm","dm","private chat","private message","direct chat","direct message"]:
+                reason = "No PM / DM"
+            elif word in ["sex","porn","xxx","nude","fuck","pussy","dick"]:
+                reason = "18+ behaviour"
+            else:
+                reason = "Against group rules"
 
+            # warn or ban
             if warnings[user_id] >= 3:
                 try:
                     await update.effective_chat.ban_member(user_id)
-                    await update.message.reply_text(f"🚫 @{username} has been banned! Reason: {reason}")
+                    await update.message.reply_text(
+                        f"🚫 {username} banned!\nReason: {reason}"
+                    )
                 except:
-                    await update.message.reply_text(f"⚠️ Could not ban @{username}, Reason: {reason}")
+                    await update.message.reply_text(
+                        f"⚠️ Cannot ban {username}"
+                    )
             else:
-                await update.message.reply_text(f"⚠️ @{username} warned ({warnings[user_id]}/3)! Reason: {reason}")
+                await update.message.reply_text(
+                    f"⚠️ {username} warned ({warnings[user_id]}/3)\nReason: {reason}"
+                )
             return
 
+# ✅ MANUAL WARN
 async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.reply_to_message:
-        user_id = update.message.reply_to_message.from_user.id
-        username = update.message.reply_to_message.from_user.username or "NoUsername"
-        reason = " ".join(context.args) if context.args else "No reason given"
+        user = update.message.reply_to_message.from_user
+        user_id = user.id
+        username = f"@{user.username}" if user.username else user.first_name
+
         warnings[user_id] = warnings.get(user_id, 0) + 1
-        await update.message.reply_text(f"⚠️ @{username} warned ({warnings[user_id]}/3)! Reason: {reason}")
 
-async def unwarn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    member = await update.effective_chat.get_member(user_id)
-    if member.status not in ["administrator", "creator"]:
-        await update.message.reply_text("❌ Only admins/owner can cancel warnings")
-        return
-    if update.message.reply_to_message:
-        target_id = update.message.reply_to_message.from_user.id
-        username = update.message.reply_to_message.from_user.username or "NoUsername"
-        if warnings.get(target_id,0) > 0:
-            warnings[target_id] -= 1
-            await update.message.reply_text(f"✅ Warning removed from @{username}")
-        else:
-            await update.message.reply_text("⚠️ This user has no warnings")
+        await update.message.reply_text(
+            f"⚠️ {username} warned ({warnings[user_id]}/3)"
+        )
 
-async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    member = await(update.effective_chat.get_member(user_id))
-    if member.status not in ["administrator", "creator"]:
-        await update.message.reply_text("❌ Only admins/owner can unban")
-        return
-    if update.message.reply_to_message:
-        target_id = update.message.reply_to_message.from_user.id
-        username = update.message.reply_to_message.from_user.username or "NoUsername"
-        try:
-            await update.effective_chat.unban_member(target_id)
-            await update.message.reply_text(f"✅ @{username} has been unbanned")
-        except:
-            await update.message.reply_text("⚠️ Could not unban user")
-
-async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    warnings.clear()
-    await update.message.reply_text("✅ All warnings cleared")
-
+# ✅ MAIN
 app = ApplicationBuilder().token(TOKEN).build()
+
 app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), check_message))
 app.add_handler(CommandHandler("warn", warn))
-app.add_handler(CommandHandler("unwarn", unwarn))
-app.add_handler(CommandHandler("unban", unban))
-app.add_handler(CommandHandler("reset", reset))
-app.add_handler(CallbackQueryHandler(button_callback))
 
-print("🤖 Bun Butter Jam Bot is running...")
+print("🤖 Bot running...")
 app.run_polling()
