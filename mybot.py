@@ -2,13 +2,13 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
 import os
 
-TOKEN = "8266575451:AAHNljhT7eplDy5I3m0mNf3Kie-4OjPQnEM"
+TOKEN = "8266575451:AAHcqrW3lq-wrDP6vMUse7u9Hh0xJofKJX8"
 
 bad_words = [
     "sex","porn","xxx","nude","fuck","ass","bitch","cunt","dick",
     "cock","pussy","slut","whore","rape","masturbate","boobs","penis",
     "pm","dm","private chat","private message","direct chat","direct message",
-    "punda","sunni","potta","thevidiya","thayali","oombu","nudity","inbox","ommala"
+    "punda","sunni","potta","thevidiya","thayali","oombu","nudity","inbox","ommala","ummbi","gommala"
 ]
 
 warnings = {}
