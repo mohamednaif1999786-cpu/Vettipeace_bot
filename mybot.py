@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
 import os
 
-TOKEN = os.getenv("TOKEN")
+TOKEN = "8266575451:AAHNljhT7eplDy5I3m0mNf3Kie-4OjPQnEM"
 
 bad_words = [
     "sex","porn","xxx","nude","fuck","ass","bitch","cunt","dick",
