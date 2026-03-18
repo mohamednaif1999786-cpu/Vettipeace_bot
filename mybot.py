@@ -26,20 +26,35 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         image = Image.new("RGBA", (800, 400), (0, 0, 0))
 font = ImageFont.load_default()
+async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    for user in update.message.new_chat_members:
+        name = user.first_name
+        username = f"@{user.username}" if user.username else "No username"
+        user_id = user.id
 
-        draw.text((50,50), " Welcome to Bun Butter Jam! 🔮", fill="white", font=font)
-        draw.text((50,120), f"👤 Name: {name}", fill="white", font=font)
-        draw.text((50,180), f"💬 Username: {username}", fill="white", font=font)
-        draw.text((50,240), f"🆔 ID: {user_id}", fill="white", font=font)
+        # Safe image (no file needed)
+        image = Image.new("RGBA", (800, 400), (0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default()
+
+        draw.text((50,50), "Welcome to Bun Butter Jam ✨", fill="white", font=font)
+        draw.text((50,120), f"Name: {name}", fill="white", font=font)
+        draw.text((50,180), f"Username: {username}", fill="white", font=font)
+        draw.text((50,240), f"ID: {user_id}", fill="white", font=font)
 
         bio = io.BytesIO()
         bio.name = "welcome.png"
         image.save(bio, "PNG")
         bio.seek(0)
 
-        keyboard = [[InlineKeyboardButton("📜 Rules", callback_data='rules')]]
+        keyboard = [[InlineKeyboardButton("Rules", callback_data='rules')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_photo(photo=InputFile(bio), caption="⚠️ Please follow the rules!", reply_markup=reply_markup)
+
+        await update.message.reply_photo(
+            photo=InputFile(bio),
+            caption="⚠️ Please follow the rules!",
+            reply_markup=reply_markup
+        )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
