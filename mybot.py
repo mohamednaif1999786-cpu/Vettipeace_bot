@@ -4,8 +4,10 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import os
 
-# Use environment variable for token (Railway)
-TOKEN = os.environ.get("8266575451:AAEo0TIRfGu4xxe14IhewejTec1VCdcxBy8")
+import os
+
+# Get the token from Railway environment variable
+TOKEN = os.getenv("TOKEN")  # TOKEN must be set in Railway Variables
 
 bad_words = [
     "sex","porn","xxx","nude","fuck","ass","bitch","cunt","dick",
