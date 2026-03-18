@@ -24,9 +24,8 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = f"@{user.username}" if user.username else "No username"
         user_id = user.id
 
-        image = Image.open("bun_butter_logo.png").convert("RGBA")
-        draw = ImageDraw.Draw(image)
-        font = ImageFont.truetype("Poppins-Bold.ttf", 40)
+        image = Image.new("RGBA", (800, 400), (0, 0, 0))
+font = ImageFont.load_default()
 
         draw.text((50,50), " Welcome to Bun Butter Jam! 🔮", fill="white", font=font)
         draw.text((50,120), f"👤 Name: {name}", fill="white", font=font)
