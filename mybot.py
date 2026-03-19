@@ -1,7 +1,7 @@
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
 
-TOKEN = "8266575451:AAHcqrW3lq-wrDP6vMUse7u9Hh0xJofKJX8"
+TOKEN = "8266575451:AAHlxAHhN3wpJ5JcvHzQmq8Vs2pcDMSFI0Q"
 
 bad_words = [
     "sex","porn","xxx","nude","fuck","ass","bitch","cunt","dick",
@@ -97,7 +97,7 @@ async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # MAIN
-app = ApplicationBuilder().token(TOKEN).build()
+app = ApplicationBuilder().(TOKEN).build()
 
 app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), check_message))
