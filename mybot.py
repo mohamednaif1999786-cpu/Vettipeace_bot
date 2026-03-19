@@ -1,42 +1,38 @@
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler, CallbackQueryHandler
+import sqlite3, random, os, requests
+from gtts import gTTS
 
-TOKEN = "8266575451:AAHlxAHhN3wpJ5JcvHzQmq8Vs2pcDMSFI0Q"
+import os
 
-bad_words = [
-    "sex","porn","xxx","nude","fuck","ass","bitch","cunt","dick",
-    "cock","pussy","slut","whore","rape","masturbate","boobs","penis",
-    "pm","dm","private chat","private message","direct chat","direct message",
-    "punda","sunni","potta","thevidiya","thayali","oombu","nudity","inbox","ommala","ummbi","gommala"
-]
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
+# 🧠 DATABASE
+conn = sqlite3.connect("memory.db", check_same_thread=False)
+cursor = conn.cursor()
+cursor.execute("CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, last_message TEXT)")
+cursor.execute("CREATE TABLE IF NOT EXISTS score (user_id INTEGER PRIMARY KEY, points INTEGER)")
+conn.commit()
+
+# ⚠️ BAD WORDS
+bad_words = ["sex","porn","xxx","nude","fuck","bitch","dick","pussy","rape","pm","dm","punda","sunni","potta","oombu","gommala","mairu", "thevidya","kiss","pvrt","ommala","ummbi","sappu"]
 warnings = {}
 
-# WELCOME MESSAGE (NO IMAGE)
+# 🔮 WELCOME
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for user in update.message.new_chat_members:
-        name = user.first_name
-        username = f"@{user.username}" if user.username else "No username"
-        group_id = update.effective_chat.id
-
-        text = f"""
-🔮 Welcome to Bun Butter Jam
-
-👤 Name: {name}
-📛 Username: {username}
-🆔 Group ID: {group_id}
-
+        await update.message.reply_text(
+f"""🔮 Welcome to "乃un 乃utter ﾌam"
+👤 Name: {user.first_name}
+📛 Username: @{user.username if user.username else "No username"}
 📜 Rules:
-🚫 Don't PM / DM
+🚫 No PM / DM
 🚫 Avoid bad words
-⚠️ Follow group rules
+⚠️ Follow rules"""
+        )
 
-📞 If any issue, contact admin
-        """
-
-        await update.message.reply_text(text)
-
-# AUTO MODERATION
+# ⚠️ AUTO MOD
 async def check_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.text:
         return
@@ -48,60 +44,116 @@ async def check_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     for word in bad_words:
         if word in msg:
-
-            # delete message
             try:
                 await update.message.delete()
             except:
                 pass
 
-            # warning count
             warnings[user_id] = warnings.get(user_id, 0) + 1
+            reason = "No PM/DM" if word in ["pm","dm"] else "Rule break"
 
-            # reason
-            if word in ["pm","dm","private chat","private message","direct chat","direct message"]:
-                reason = "No PM / DM"
-            elif word in ["sex","porn","xxx","nude","fuck","pussy","dick"]:
-                reason = "18+ behaviour"
-            else:
-                reason = "Against group rules"
+            keyboard = [[InlineKeyboardButton("✅ Remove Warn", callback_data=f"unwarn_{user_id}")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
-            # warn or ban
             if warnings[user_id] >= 3:
                 try:
                     await update.effective_chat.ban_member(user_id)
-                    await update.message.reply_text(
-                        f"🚫 {username} banned!\nReason: {reason}"
-                    )
+                    await update.message.reply_text(f"🚫 {username} banned\nReason: {reason}")
                 except:
-                    await update.message.reply_text(
-                        f"⚠️ Cannot ban {username}"
-                    )
+                    pass
             else:
                 await update.message.reply_text(
-                    f"⚠️ {username} warned ({warnings[user_id]}/3)\nReason: {reason}"
+                    f"⚠️ {username} warned ({warnings[user_id]}/3)\nReason: {reason}\nWord: {word}",
+                    reply_markup=reply_markup
                 )
             return
 
-# MANUAL WARN
-async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.reply_to_message:
-        user = update.message.reply_to_message.from_user
-        user_id = user.id
-        username = f"@{user.username}" if user.username else user.first_name
+# 👑 REMOVE WARN
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-        warnings[user_id] = warnings.get(user_id, 0) + 1
+    user_id = int(query.data.split("_")[1])
+    admin = await update.effective_chat.get_member(query.from_user.id)
 
-        await update.message.reply_text(
-            f"⚠️ {username} warned ({warnings[user_id]}/3)"
-        )
+    if admin.status not in ["administrator", "creator"]:
+        await query.edit_message_text("❌ Only admin")
+        return
 
-# MAIN
-app = ApplicationBuilder().token(TOKEN).build()
+    if warnings.get(user_id, 0) > 0:
+        warnings[user_id] -= 1
+        await query.edit_message_text("✅ Warning removed")
+
+# 🤖 FREE AI (HUGGINGFACE)
+async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.text:
+        return
+
+    text = update.message.text
+
+    if any('\u0b80' <= c <= '\u0bff' for c in text):
+        lang = "Tamil"
+    elif any(w in text.lower() for w in ["bro","da","machan","epdi"]):
+        lang = "Tanglish"
+    else:
+        lang = "English"
+
+    try:
+        API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+
+        prompt = f"Reply only in {lang}. Talk like a friend. Message: {text}"
+
+        res = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+        result = res.json()
+
+        reply = result[0]["generated_text"]
+        await update.message.reply_text(reply)
+
+    except:
+        await update.message.reply_text("⚠️ AI busy, try later")
+
+# 🎮 GAME
+def add_points(uid, pts):
+    cursor.execute("SELECT points FROM score WHERE user_id=?", (uid,))
+    row = cursor.fetchone()
+    if row:
+        cursor.execute("UPDATE score SET points=? WHERE user_id=?", (row[0]+pts, uid))
+    else:
+        cursor.execute("INSERT INTO score VALUES (?,?)", (uid, pts))
+    conn.commit()
+
+async def dice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    num = random.randint(1,6)
+    uid = update.message.from_user.id
+    add_points(uid, num)
+    await update.message.reply_text(f"🎲 Dice: {num} (+{num} pts)")
+
+async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cursor.execute("SELECT * FROM score ORDER BY points DESC LIMIT 5")
+    rows = cursor.fetchall()
+    text = "🏆 Leaderboard:\n"
+    for i,r in enumerate(rows,1):
+        text += f"{i}. {r[0]} - {r[1]} pts\n"
+    await update.message.reply_text(text)
+
+# 🔊 VOICE
+async def voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    tts = gTTS(update.message.text)
+    tts.save("v.mp3")
+    await update.message.reply_voice(voice=open("v.mp3","rb"))
+    os.remove("v.mp3")
+
+# 🚀 MAIN
+app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), check_message))
-app.add_handler(CommandHandler("warn", warn))
+app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), ai_reply))
+app.add_handler(CallbackQueryHandler(button_handler))
+app.add_handler(CommandHandler("dice", dice))
+app.add_handler(CommandHandler("leaderboard", leaderboard))
+app.add_handler(CommandHandler("voice", voice))
 
-print("🤖 Bot running...")
+print("🔥 Bot Running...")
 app.run_polling()
