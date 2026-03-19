@@ -1,18 +1,11 @@
 [build]
-# Use a specific Python image so everything matches your requirements
 image = "python:3.13"
 
 [deploy]
-# Command to start the bot
 command = "python mybot.py"
 
 [env]
-# Telegram Bot Token and Hugging Face token
 BOT_TOKEN = "your_telegram_bot_token_here"
 HF_TOKEN = "your_huggingface_token_here"
-
-# Optional: Set timezone if you want daily/weekly leaderboard resets to work correctly
 TIMEZONE = "Asia/Kolkata"
-
-# Optional: Quiz interval in seconds (default 10 minutes)
 QUIZ_INTERVAL = "600"
