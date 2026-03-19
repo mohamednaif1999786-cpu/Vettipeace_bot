@@ -97,7 +97,7 @@ async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # MAIN
-app = ApplicationBuilder().(TOKEN).build()
+app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), check_message))
