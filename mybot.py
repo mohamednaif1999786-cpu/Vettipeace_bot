@@ -4,24 +4,20 @@ import asyncio
 import sqlite3
 import random
 
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup
-)
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, ContextTypes, filters
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+
 import openai
 from gtts import gTTS
 
 # -------- ENV VARIABLES --------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-QUIZ_INTERVAL = int(os.getenv("QUIZ_INTERVAL", 600))  # in seconds
+QUIZ_INTERVAL = int(os.getenv("QUIZ_INTERVAL", 600))  # seconds
 
 openai.api_key = OPENAI_API_KEY
 
-# -------- DATABASE SETUP --------
+# -------- DATABASE --------
 conn = sqlite3.connect("bot_data.db", check_same_thread=False)
 cursor = conn.cursor()
 
@@ -49,10 +45,10 @@ CREATE TABLE IF NOT EXISTS quiz (
 """)
 conn.commit()
 
-# -------- BAD WORD LIST --------
+# -------- BAD WORDS --------
 BAD_WORDS = [
     "sex","porn","xxx","nude","fuck","ass","bitch","dick","pussy","rape",
-    "pm","dm","private chat","private message","direct chat","direct message","mairu","gommala","ommala","sunni","potta","thaniya"
+    "pm","dm","private chat","private message","direct chat","direct message","sunni","punda","mairu","thaniya","potta","thevidya","thayoli","thayali","oombu","ummbi","pvrt","inbox"
 ]
 
 # -------- HELPER FUNCTIONS --------
@@ -87,7 +83,7 @@ def get_leaderboard():
     cursor.execute("SELECT username, points FROM points ORDER BY points DESC LIMIT 10")
     return cursor.fetchall()
 
-# -------- WELCOME HANDLER --------
+# -------- WELCOME --------
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for user in update.message.new_chat_members:
         uname = user.username if user.username else user.first_name
@@ -95,14 +91,16 @@ async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔮 Welcome to Bun Butter Jam!\n"
             f"👤 Name: {user.first_name}\n"
             f"📛 Username: @{uname}\n"
-            f"📜 Follow rules and have fun!"
+            f"📜 Rules:\n"
+            f" - Don't PM/DM others\n"
+            f" - Avoid bad words\n"
+            f" - Contact admin for issues"
         )
 
-# -------- WARN & BADWORD DETECTION --------
+# -------- BAD WORD DETECTION --------
 async def check_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.text:
         return
-
     user = update.message.from_user
     text = update.message.text.lower()
 
@@ -116,18 +114,17 @@ async def check_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     await update.effective_chat.ban_member(user.id)
                     await update.message.reply_text(
-                        f"🚫 @{user.username or user.first_name} *banned!* Reason: {reason} ({count}/3)",
-                        parse_mode="Markdown"
+                        f"🚫 @{user.username or user.first_name} banned! Reason: {reason} ({count}/3)"
                     )
                 except:
-                    await update.message.reply_text("⚠️ Cannot ban (bot needs admin)")
+                    await update.message.reply_text("⚠️ Cannot ban, bot needs admin")
             else:
                 await update.message.reply_text(
                     f"⚠️ @{user.username or user.first_name} warned ({count}/3)\nReason: {reason}"
                 )
             return
 
-# -------- ADMIN WARN COMMANDS --------
+# -------- ADMIN COMMANDS --------
 async def warn_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.reply_to_message:
         await update.message.reply_text("Reply to someone to warn them.")
@@ -151,21 +148,18 @@ async def unwarn_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.text:
         return
-
     text = update.message.text
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role":"system","content":"You are a friendly chat bot in a Telegram group."},
-                {"role":"user","content": text}
-            ],
+            messages=[{"role":"system","content":"You are a friendly chat bot in Telegram group."},
+                      {"role":"user","content":text}],
             max_tokens=100,
             temperature=0.7
         )
         reply = response.choices[0].message.content.strip()
         await update.message.reply_text(reply)
-    except Exception as e:
+    except Exception:
         await update.message.reply_text("⚠️ AI error, try again later.")
 
 # -------- VOICE --------
@@ -187,19 +181,15 @@ async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"{i}. {uname} - {pts} pts\n"
     await update.message.reply_text(text)
 
-# -------- AI QUIZ GENERATION --------
+# -------- AI QUIZ --------
 async def generate_ai_quiz():
-    prompt = (
-        "Generate a multiple choice (MCQ) general knowledge quiz question with 4 options. "
-        "Output like: question|opt1,opt2,opt3,opt4|correct_answer"
-    )
+    prompt = ("Generate one multiple choice general knowledge question "
+              "format: question|opt1,opt2,opt3,opt4|correct_answer")
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role":"system","content":"You generate one MCQ question."},
-                {"role":"user","content": prompt}
-            ],
+            messages=[{"role":"system","content":"You generate one MCQ question."},
+                      {"role":"user","content":prompt}],
             max_tokens=200
         )
         text = response.choices[0].message.content.strip()
@@ -207,13 +197,11 @@ async def generate_ai_quiz():
         options = opts.split(",")
         return q.strip(), options, ans.strip()
     except:
-        # Fallback if AI fails
         return "What is 2+2?", ["1","2","3","4"], "4"
 
 async def auto_ai_quiz_task(app):
     while True:
         question, options, answer = await generate_ai_quiz()
-
         cursor.execute("DELETE FROM quiz")
         cursor.execute("INSERT INTO quiz(question, answer, active) VALUES(?, ?, 1)", (question, answer))
         conn.commit()
@@ -223,14 +211,11 @@ async def auto_ai_quiz_task(app):
 
         for chat_id in app.bot_data.get("groups", []):
             try:
-                await app.bot.send_message(chat_id=chat_id, text=f"❓ AI Quiz Time:\n{question}", reply_markup=reply_markup)
+                await app.bot.send_message(chat_id=chat_id, text=f"❓ AI Quiz:\n{question}", reply_markup=reply_markup)
             except Exception as e:
-                print("Quiz send error:", e)
+                print("Quiz error:", e)
 
         await asyncio.sleep(QUIZ_INTERVAL)
-
-async def start_auto_quiz(app):
-    asyncio.create_task(auto_ai_quiz_task(app))
 
 async def track_groups(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -254,21 +239,27 @@ async def quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await query.edit_message_text(f"❌ Wrong! Correct: {ans}")
 
-# -------- BOT SETUP --------
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+# -------- MAIN --------
+async def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
-app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), check_message))
-app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), ai_reply))
-app.add_handler(MessageHandler(filters.ALL, track_groups))
+    # Add handlers
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), check_message))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), ai_reply))
+    app.add_handler(MessageHandler(filters.ALL, track_groups))
 
-app.add_handler(CommandHandler("warn", warn_command))
-app.add_handler(CommandHandler("unwarn", unwarn_command))
-app.add_handler(CommandHandler("leaderboard", leaderboard))
-app.add_handler(CommandHandler("voice", voice_command))
-app.add_handler(CallbackQueryHandler(quiz_answer))
+    app.add_handler(CommandHandler("warn", warn_command))
+    app.add_handler(CommandHandler("unwarn", unwarn_command))
+    app.add_handler(CommandHandler("leaderboard", leaderboard))
+    app.add_handler(CommandHandler("voice", voice_command))
+    app.add_handler(CallbackQueryHandler(quiz_answer))
 
-app.post_init.append(start_auto_quiz)
+    # Start auto quiz task in background
+    asyncio.create_task(auto_ai_quiz_task(app))
 
-print("🤖 Bun Butter Jam Bot Running...")
-app.run_polling()
+    print("🤖 Bun Butter Jam Bot Running...")
+    await app.run_polling()
+
+if __name__ == "__main__":
+    asyncio.run(main())
