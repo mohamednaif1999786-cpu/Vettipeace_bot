@@ -1,11 +1,12 @@
 [build]
-image = "python:3.13"
+builder = "NIXPACKS"
 
 [deploy]
-command = "python mybot.py"
+startCommand = "python mybot.py"
 
 [env]
-BOT_TOKEN = "your_telegram_bot_token_here"
-HF_TOKEN = "your_huggingface_token_here"
-TIMEZONE = "Asia/Kolkata"
-QUIZ_INTERVAL = "600"
+# Add your environment variables in Railway dashboard instead of here
+# Example:
+# BOT_TOKEN="123456789:AA..."
+# OPENAI_API_KEY="sk-xxxx..."
+# QUIZ_INTERVAL="600"
