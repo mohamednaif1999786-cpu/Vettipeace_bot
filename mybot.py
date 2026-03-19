@@ -1,6 +1,5 @@
 # mybot.py
 import os
-import asyncio
 import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -12,15 +11,15 @@ from telegram.ext import (
     filters
 )
 import openai
-import nest_asyncio
-nest_asyncio.apply()
 
 # -------------------------------
 # Environment Variables
 # -------------------------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-QUIZ_INTERVAL = int(os.getenv("QUIZ_INTERVAL", 600))  # default 10 min
+QUIZ_INTERVAL = int(os.getenv("QUIZ_INTERVAL", 600))  # default 10 minutes
+QUIZ_CHAT_ID = int(os.getenv("QUIZ_CHAT_ID", 0))      # Set your group chat ID
+
 openai.api_key = OPENAI_API_KEY
 
 # -------------------------------
@@ -32,21 +31,19 @@ bad_words = [
     "pm","dm","private chat","private message","direct chat","direct message",
     "punda","sunni","potta","thevudiya","thayoli","oombu","nudity","inbox","thevidya","ummbu","gommala","ommala","mairu","thayali"
 ]
+
 warnings = {}        # user_id: warning_count
 leaderboard = {}     # user_id: points
-active_quiz = {}     # chat_id: {question, answer}
+active_quiz = {}     # chat_id: {question, options, answer}
 
 # -------------------------------
 # Helper Functions
 # -------------------------------
-
 async def send_ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Reply to user message using OpenAI"""
     if not update.message or not update.message.text:
         return
-    user_text = update.message.text
-    chat_id = update.effective_chat.id
     try:
+        user_text = update.message.text
         response = openai.Completion.create(
             model="text-davinci-003",
             prompt=f"You are a helpful friend in a Telegram group. Reply to: {user_text}",
@@ -59,16 +56,14 @@ async def send_ai_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ AI reply error.")
 
 async def handle_bad_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Check for bad words, delete message, warn or ban"""
     if not update.message or not update.message.text:
         return
-
-    msg_text = update.message.text.lower()
+    msg = update.message.text.lower()
     user_id = update.message.from_user.id
     username = update.message.from_user.username or update.message.from_user.first_name
 
     for word in bad_words:
-        if word in msg_text:
+        if word in msg:
             try: await update.message.delete()
             except: pass
 
@@ -76,7 +71,7 @@ async def handle_bad_words(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "18+ behavior" if word not in ["pm","dm","private chat","private message","direct chat","direct message"]
                 else "against group rules"
             )
-            warnings[user_id] = warnings.get(user_id,0)+1
+            warnings[user_id] = warnings.get(user_id, 0) + 1
 
             if warnings[user_id] >= 3:
                 try:
@@ -97,22 +92,21 @@ async def warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = target.id
         username = target.username or target.first_name
         reason = " ".join(context.args) if context.args else "No reason"
-        warnings[user_id] = warnings.get(user_id,0)+1
+        warnings[user_id] = warnings.get(user_id, 0) + 1
         await update.message.reply_text(f"⚠️ @{username} warned ({warnings[user_id]}/3)! Reason: {reason}")
 
 async def unwarn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Admin only
     user_id = update.message.from_user.id
     member = await update.effective_chat.get_member(user_id)
-    if member.status not in ["administrator","creator"]:
+    if member.status not in ["administrator", "creator"]:
         await update.message.reply_text("❌ Only admins/owner can remove warns")
         return
     if update.message.reply_to_message:
         target = update.message.reply_to_message.from_user
         target_id = target.id
         username = target.username or target.first_name
-        if warnings.get(target_id,0)>0:
-            warnings[target_id]-=1
+        if warnings.get(target_id, 0) > 0:
+            warnings[target_id] -= 1
             await update.message.reply_text(f"✅ @{username} warn removed by admin")
         else:
             await update.message.reply_text("⚠️ This user has no warnings")
@@ -132,10 +126,8 @@ async def start_guess_number(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def guess_number_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "guess_number" not in context.chat_data:
         return
-    try:
-        guess = int(update.message.text)
-    except:
-        return
+    try: guess = int(update.message.text)
+    except: return
     number = context.chat_data["guess_number"]
     user_id = update.message.from_user.id
     username = update.message.from_user.username or update.message.from_user.first_name
@@ -148,47 +140,43 @@ async def guess_number_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await update.message.reply_text("🔽 Lower!")
 
-# -------------------------------
-# Leaderboard
-# -------------------------------
 async def show_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not leaderboard:
         await update.message.reply_text("📊 No scores yet!")
         return
     text = "🏆 Leaderboard:\n"
-    for uid, pts in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True):
+    for uid, pts in sorted(leaderboard.items(), key=lambda x:x[1], reverse=True):
         text += f"- {pts} points\n"
     await update.message.reply_text(text)
 
 # -------------------------------
 # Auto-AI Quiz
 # -------------------------------
-async def auto_ai_quiz_task(app):
-    while True:
-        try:
-            chat_id = os.getenv("QUIZ_CHAT_ID")  # add the group chat id env variable
-            if chat_id:
-                prompt = "Give me an easy trivia question for a Telegram group with options, in format: question|option1,option2,option3,option4|answer"
-                response = openai.Completion.create(
-                    model="text-davinci-003",
-                    prompt=prompt,
-                    max_tokens=150
-                )
-                data = response.choices[0].text.strip()
-                parts = data.split("|")
-                if len(parts)==3:
-                    question, options, answer = parts
-                    active_quiz[int(chat_id)] = {"question": question, "options": options.split(","), "answer": answer}
-                    buttons = [[InlineKeyboardButton(opt, callback_data=opt)] for opt in options.split(",")]
-                    await app.bot.send_message(int(chat_id), f"🧠 Quiz Time!\n{question}", reply_markup=InlineKeyboardMarkup(buttons))
-        except Exception as e:
-            print(f"Quiz Error: {e}")
-        await asyncio.sleep(QUIZ_INTERVAL)
+async def auto_ai_quiz(context: ContextTypes.DEFAULT_TYPE):
+    try:
+        chat_id = QUIZ_CHAT_ID
+        if not chat_id: return
+        prompt = "Give an easy trivia question with options, format: question|option1,option2,option3,option4|answer"
+        response = openai.Completion.create(
+            model="text-davinci-003",
+            prompt=prompt,
+            max_tokens=150
+        )
+        data = response.choices[0].text.strip()
+        parts = data.split("|")
+        if len(parts) == 3:
+            question, options, answer = parts
+            options_list = options.split(",")
+            active_quiz[chat_id] = {"question": question, "options": options_list, "answer": answer}
+            buttons = [[InlineKeyboardButton(opt, callback_data=opt)] for opt in options_list]
+            await context.bot.send_message(chat_id, f"🧠 Quiz Time!\n{question}", reply_markup=InlineKeyboardMarkup(buttons))
+    except Exception as e:
+        print(f"Quiz Error: {e}")
 
 async def quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    chat_id = query.message.chat_id
+    chat_id = query.message.chat.id
     user_id = query.from_user.id
     username = query.from_user.username or query.from_user.first_name
     if chat_id in active_quiz:
@@ -196,24 +184,22 @@ async def quiz_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == correct:
             leaderboard[user_id] = leaderboard.get(user_id,0)+5
             await query.edit_message_text(f"✅ @{username} answered correctly! +5 points")
-            del active_quiz[chat_id]
         else:
-            await query.edit_message_text(f"❌ @{username} answered wrong! Correct answer: {correct}")
-            del active_quiz[chat_id]
+            await query.edit_message_text(f"❌ @{username} answered wrong! Correct: {correct}")
+        del active_quiz[chat_id]
 
 # -------------------------------
-# Welcome new members
+# Welcome
 # -------------------------------
 async def welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for user in update.message.new_chat_members:
         username = user.username or user.first_name
-        user_id = user.id
-        await update.message.reply_text(f"🔮 Welcome to Bun Butter Jam, @{username}!\nPlease follow the rules:\n1️⃣ Don't PM/DM\n2️⃣ Avoid bad words\n3️⃣ Contact admin if issues")
+        await update.message.reply_text(f"🔮 Welcome to Bun Butter Jam, @{username}!\nRules:\n1️⃣ Don't PM/DM\n2️⃣ Avoid bad words\n3️⃣ Contact admin if issues")
 
 # -------------------------------
 # Main
 # -------------------------------
-async def main():
+def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Handlers
@@ -228,16 +214,11 @@ async def main():
     app.add_handler(CommandHandler("guess", start_guess_number))
     app.add_handler(CallbackQueryHandler(quiz_answer))
 
-    # Start auto-AI quiz background task
-    asyncio.create_task(auto_ai_quiz_task(app))
+    # Job queue for auto-AI quiz every QUIZ_INTERVAL seconds
+    app.job_queue.run_repeating(auto_ai_quiz, interval=QUIZ_INTERVAL, first=10)
 
     print("🤖 Bun Butter Jam Bot Running...")
-    await app.run_polling()
+    app.run_polling()
 
 if __name__ == "__main__":
-    try:
-        asyncio.get_event_loop().run_until_complete(main())
-    except RuntimeError:
-        import nest_asyncio
-        nest_asyncio.apply()
-        asyncio.get_event_loop().run_until_complete(main())
+    main()
