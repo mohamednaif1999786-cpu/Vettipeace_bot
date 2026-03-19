@@ -5,7 +5,6 @@ builder = "NIXPACKS"
 startCommand = "python mybot.py"
 
 [env]
-# Add in Railway dashboard:
-# BOT_TOKEN=your_bot_token
-# OPENAI_API_KEY=your_openai_key
-# QUIZ_INTERVAL=600
+BOT_TOKEN=<your telegram token>
+OPENAI_API_KEY=<your openai key>
+QUIZ_INTERVAL=600
